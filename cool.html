@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mrpack compressor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap');
+
+  :root {
+    --bg: #0f0f12;
+    --surface: #18181e;
+    --border: #2a2a35;
+    --accent: #6ee7b7;
+    --accent-dim: #1a3d30;
+    --text: #e8e8f0;
+    --muted: #6b6b7e;
+    --warn: #fbbf24;
+    --err: #f87171;
+    --font-body: 'Syne', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px 80px;
+  }
+
+  header { text-align: center; margin-bottom: 40px; }
+  header h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: var(--accent); }
+  header p { font-size: 0.9rem; color: var(--muted); margin-top: 6px; font-family: var(--font-mono); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    width: 100%;
+    max-width: 660px;
+  }
+
+  #drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 20px;
+    position: relative;
+  }
+  #drop-zone:hover, #drop-zone.dragover { border-color: var(--accent); background: var(--accent-dim); }
+  #drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 2.4rem; margin-bottom: 12px; }
+  #drop-zone h2 { font-size: 1.05rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  #drop-zone p { font-size: 0.8rem; color: var(--muted); font-family: var(--font-mono); }
+
+  .divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: 20px 0; color: var(--muted); font-size: 0.78rem; font-family: var(--font-mono);
+  }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .path-row { display: flex; gap: 10px; align-items: stretch; }
+  #path-input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; font-family: var(--font-mono); font-size: 0.82rem; color: var(--text);
+    outline: none; transition: border-color 0.2s;
+  }
+  #path-input:focus { border-color: var(--accent); }
+  #path-input::placeholder { color: var(--muted); }
+
+  .btn {
+    font-family: var(--font-body); font-weight: 600; font-size: 0.85rem;
+    padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-primary { background: var(--accent); color: #0a1f18; }
+  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+  .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .btn-ghost:hover:not(:disabled) { background: var(--accent-dim); }
+
+  .options { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 20px; }
+  .options-group { margin-bottom: 20px; }
+  .group-label {
+    font-size: 0.72rem; font-family: var(--font-mono); color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+
+  .option-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 0; gap: 16px;
+  }
+  .option-row + .option-row { border-top: 1px solid #1e1e27; }
+  .option-text { flex: 1; min-width: 0; }
+  .option-label { font-size: 0.88rem; color: var(--text); }
+  .option-sub { font-size: 0.74rem; color: var(--muted); font-family: var(--font-mono); margin-top: 2px; line-height: 1.4; }
+
+  .toggle { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-bg { position: absolute; inset: 0; background: var(--border); border-radius: 11px; transition: background 0.2s; cursor: pointer; }
+  .toggle input:checked + .toggle-bg { background: var(--accent); }
+  .toggle-dot { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; background: var(--text); border-radius: 50%; transition: transform 0.2s; pointer-events: none; }
+  .toggle input:checked ~ .toggle-dot { transform: translateX(16px); }
+
+  select {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: var(--font-mono); font-size: 0.8rem;
+    padding: 5px 10px; cursor: pointer; outline: none; flex-shrink: 0;
+  }
+  select:focus { border-color: var(--accent); }
+
+  .compress-btn-wrap { margin-top: 24px; display: flex; justify-content: center; }
+  #compress-btn { padding: 13px 48px; font-size: 1rem; border-radius: 10px; letter-spacing: 0.01em; }
+
+  #file-info {
+    display: none; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 20px;
+    font-family: var(--font-mono); font-size: 0.8rem;
+  }
+  #file-info .fi-name { color: var(--accent); font-weight: 500; margin-bottom: 4px; word-break: break-all; }
+  #file-info .fi-meta { color: var(--muted); }
+
+  #progress-section { display: none; margin-top: 24px; border-top: 1px solid var(--border); padding-top: 20px; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 0.8rem; font-family: var(--font-mono); color: var(--muted); margin-bottom: 8px; }
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; width: 0%; transition: width 0.1s linear; }
+
+  .log {
+    margin-top: 16px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px; font-family: var(--font-mono);
+    font-size: 0.75rem; color: var(--muted); max-height: 200px; overflow-y: auto; line-height: 1.7;
+  }
+  .log .log-ok { color: var(--accent); }
+  .log .log-warn { color: var(--warn); }
+  .log .log-err { color: var(--err); }
+  .log .log-info { color: var(--muted); }
+
+  #result-section {
+    display: none; margin-top: 20px; background: var(--accent-dim);
+    border: 1px solid var(--accent); border-radius: 12px; padding: 20px;
+  }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; text-align: center; }
+  .result-item label { display: block; font-size: 0.7rem; font-family: var(--font-mono); color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .result-item .val { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+  .result-item.savings .val { color: var(--accent); }
+  .result-actions { display: flex; gap: 10px; justify-content: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>.mrpack compressor</h1>
+  <p>reduce file size &bull; strip bloat &bull; re-zip with max compression</p>
+</header>
+
+<div class="card">
+  <div id="drop-zone">
+    <input type="file" id="file-input" accept=".mrpack">
+    <div class="drop-icon">📦</div>
+    <h2>Drop your .mrpack here</h2>
+    <p>or click to browse</p>
+  </div>
+
+  <div id="file-info">
+    <div class="fi-name" id="fi-name"></div>
+    <div class="fi-meta" id="fi-meta"></div>
+  </div>
+
+  <div class="divider">or enter path</div>
+  <div class="path-row">
+    <input type="text" id="path-input" placeholder="/path/to/modpack.mrpack">
+    <button class="btn btn-ghost" onclick="loadFromPath()">Load</button>
+  </div>
+
+  <div class="options">
+
+    <div class="options-group">
+      <div class="group-label">compression</div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Re-compress at max level</div>
+          <div class="option-sub">re-zips all entries at deflate level 9 — the biggest size saver</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-rezip" checked><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Minify modrinth.index.json</div>
+          <div class="option-sub">strips all whitespace from the manifest JSON</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-minify-json"><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Normalize line endings</div>
+          <div class="option-sub">converts CRLF → LF in text config files (.toml, .json, .cfg, etc.)</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-crlf" checked><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+    </div>
+
+    <div class="options-group">
+      <div class="group-label">cleaning</div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Remove duplicate files</div>
+          <div class="option-sub">drops identical files appearing more than once in overrides</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-dedup" checked><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Strip junk files</div>
+          <div class="option-sub">removes .DS_Store, Thumbs.db, desktop.ini, .gitkeep, etc.</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-junk" checked><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Strip empty folders</div>
+          <div class="option-sub">removes zero-byte directory entries from the zip</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-empty-dirs" checked><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Strip log files</div>
+          <div class="option-sub">removes any .log files accidentally bundled in overrides</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-logs" checked><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Strip disabled mods</div>
+          <div class="option-sub">removes .jar.disabled files from overrides/mods/</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-disabled-mods" checked><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Strip unreferenced configs</div>
+          <div class="option-sub">removes configs with no matching mod in the index — best-effort, off by default</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-strip-configs"><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+    </div>
+
+    <div class="options-group">
+      <div class="group-label">optional removals</div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Strip shaderpacks</div>
+          <div class="option-sub">removes overrides/shaderpacks/ — players usually pick their own</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-shaders"><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Strip resourcepacks</div>
+          <div class="option-sub">removes overrides/resourcepacks/ — only use if none are required by the pack</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-resourcepacks"><span class="toggle-bg"></span><span class="toggle-dot"></span></label>
+      </div>
+    </div>
+
+    <div class="options-group">
+      <div class="group-label">output</div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Output filename suffix</div>
+          <div class="option-sub">appended to the filename before the extension</div>
+        </div>
+        <select id="opt-suffix">
+          <option value="-compressed">-compressed</option>
+          <option value="-small">-small</option>
+          <option value="-opt">-opt</option>
+          <option value="">none (overwrite)</option>
+        </select>
+      </div>
+      <div class="option-row">
+        <div class="option-text">
+          <div class="option-label">Output format</div>
+          <div class="option-sub">save as .mrpack or export as a plain .zip with identical contents</div>
+        </div>
+        <select id="opt-format">
+          <option value="mrpack">.mrpack</option>
+          <option value="zip">.zip</option>
+        </select>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="compress-btn-wrap">
+    <button class="btn btn-primary" id="compress-btn" disabled onclick="runCompression()">Compress</button>
+  </div>
+
+  <div id="progress-section">
+    <div class="progress-label">
+      <span id="progress-stage">Reading file…</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div id="result-section">
+    <div class="result-grid">
+      <div class="result-item"><label>original</label><div class="val" id="res-orig"></div></div>
+      <div class="result-item savings"><label>saved</label><div class="val" id="res-saved"></div></div>
+      <div class="result-item"><label>final size</label><div class="val" id="res-final"></div></div>
+    </div>
+    <div class="result-actions">
+      <button class="btn btn-primary" onclick="downloadResult()">Download</button>
+      <button class="btn btn-ghost" onclick="resetTool()">Compress another</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+<script>
+let loadedFile = null;
+let resultBlob = null;
+let resultFilename = '';
+
+const JUNK_FILES = new Set([
+  '.ds_store','thumbs.db','desktop.ini','.gitkeep','.gitignore',
+  '.gitattributes','ehthumbs.db','.spotlight-v100','.trashes','.fseventsd'
+]);
+const TEXT_EXTS = new Set(['toml','json','cfg','txt','properties','yaml','yml','xml','ini','conf','md']);
+
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0]; if (f) handleFile(f);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  if (!file.name.endsWith('.mrpack')) { alert('Please select a .mrpack file.'); return; }
+  loadedFile = file;
+  document.getElementById('fi-name').textContent = file.name;
+  document.getElementById('fi-meta').textContent = `${fmtBytes(file.size)} · .mrpack`;
+  document.getElementById('file-info').style.display = 'block';
+  document.getElementById('compress-btn').disabled = false;
+  document.getElementById('result-section').style.display = 'none';
+  document.getElementById('progress-section').style.display = 'none';
+}
+
+function loadFromPath() {
+  log('warn', 'Path input is browser-sandboxed — use drag & drop or the file picker instead.');
+}
+
+async function runCompression() {
+  if (!loadedFile) return;
+  document.getElementById('compress-btn').disabled = true;
+  document.getElementById('result-section').style.display = 'none';
+  document.getElementById('progress-section').style.display = 'block';
+  document.getElementById('log').innerHTML = '';
+  resultBlob = null;
+
+  const opts = {
+    rezip:         document.getElementById('opt-rezip').checked,
+    minifyJson:    document.getElementById('opt-minify-json').checked,
+    crlf:          document.getElementById('opt-crlf').checked,
+    dedup:         document.getElementById('opt-dedup').checked,
+    junk:          document.getElementById('opt-junk').checked,
+    emptyDirs:     document.getElementById('opt-empty-dirs').checked,
+    logs:          document.getElementById('opt-logs').checked,
+    disabledMods:  document.getElementById('opt-disabled-mods').checked,
+    stripConfigs:  document.getElementById('opt-strip-configs').checked,
+    shaders:       document.getElementById('opt-shaders').checked,
+    resourcepacks: document.getElementById('opt-resourcepacks').checked,
+    suffix:        document.getElementById('opt-suffix').value,
+    format:        document.getElementById('opt-format').value,
+  };
+
+  const origSize = loadedFile.size;
+
+  try {
+    setProgress(5, 'Reading .mrpack…');
+    log('ok', `Loaded: ${loadedFile.name} (${fmtBytes(origSize)})`);
+
+    const uint8 = new Uint8Array(await loadedFile.arrayBuffer());
+
+    setProgress(15, 'Unzipping…');
+    const unzipped = await new Promise((res, rej) => fflate.unzip(uint8, (e, d) => e ? rej(e) : res(d)));
+    log('ok', `Entries found: ${Object.keys(unzipped).length}`);
+
+    setProgress(25, 'Parsing index…');
+    const indexRaw = unzipped['modrinth.index.json'];
+    if (!indexRaw) throw new Error('modrinth.index.json not found — is this a valid .mrpack?');
+    const index = JSON.parse(new TextDecoder().decode(indexRaw));
+    log('ok', `Pack: "${index.name || 'unknown'}" · ${index.files?.length || 0} mod references`);
+
+    setProgress(35, 'Processing entries…');
+
+    const keep = {};
+    const seen = new Map();
+    const c = { junk:0, emptyDir:0, log:0, disabledMod:0, shader:0, resourcepack:0, config:0, dedup:0, crlf:0 };
+
+    for (const [path, data] of Object.entries(unzipped)) {
+      if (path === 'modrinth.index.json') continue;
+
+      const pl = path.toLowerCase();
+      const filename = pl.split('/').pop();
+      const ext = filename.includes('.') ? filename.split('.').pop() : '';
+
+      if (opts.emptyDirs && path.endsWith('/') && data.length === 0) {
+        log('info', `Empty dir: ${path}`); c.emptyDir++; continue;
+      }
+      if (opts.junk && (JUNK_FILES.has(filename) || filename.startsWith('._'))) {
+        log('info', `Junk: ${path}`); c.junk++; continue;
+      }
+      if (opts.logs && ext === 'log') {
+        log('info', `Log: ${path}`); c.log++; continue;
+      }
+      if (opts.disabledMods && (pl.endsWith('.jar.disabled') || pl.endsWith('.disabled'))) {
+        log('info', `Disabled mod: ${path}`); c.disabledMod++; continue;
+      }
+      if (opts.shaders && (pl.includes('/shaderpacks/') || pl.includes('/shaders/'))) {
+        log('warn', `Shaderpack: ${path}`); c.shader++; continue;
+      }
+      if (opts.resourcepacks && pl.includes('/resourcepacks/')) {
+        log('warn', `Resourcepack: ${path}`); c.resourcepack++; continue;
+      }
+      if (opts.stripConfigs && pl.includes('/config/') && !path.endsWith('/')) {
+        const cfgBase = filename.replace(/\.(toml|json|cfg|txt|yaml|yml|properties)$/, '');
+        const modIds = (index.files || []).map(f => (f.path || '').toLowerCase());
+        if (!modIds.some(id => id.includes(cfgBase))) {
+          log('info', `Config (unreferenced): ${path}`); c.config++; continue;
+        }
+      }
+      if (opts.dedup) {
+        const hash = simpleHash(data);
+        if (seen.has(hash)) { log('info', `Duplicate: ${path}`); c.dedup++; continue; }
+        seen.set(hash, path);
+      }
+
+      let finalData = data;
+      if (opts.crlf && TEXT_EXTS.has(ext) && data.length > 0) {
+        const hasCRLF = data.some((b, i) => b === 0x0d && data[i+1] === 0x0a);
+        if (hasCRLF) {
+          finalData = new TextEncoder().encode(new TextDecoder('utf-8',{fatal:false}).decode(data).replace(/\r\n/g,'\n'));
+          c.crlf++;
+        }
+      }
+
+      keep[path] = finalData;
+    }
+
+    const removed = c.junk+c.emptyDir+c.log+c.disabledMod+c.shader+c.resourcepack+c.config+c.dedup;
+    log('ok', `Removed ${removed} entries — junk:${c.junk} dirs:${c.emptyDir} logs:${c.log} disabled:${c.disabledMod} shaders:${c.shader} resourcepacks:${c.resourcepack} configs:${c.config} dupes:${c.dedup}`);
+    if (c.crlf) log('ok', `CRLF normalized in ${c.crlf} files`);
+
+    setProgress(55, 'Re-encoding index…');
+    keep['modrinth.index.json'] = new TextEncoder().encode(
+      opts.minifyJson ? JSON.stringify(index) : JSON.stringify(index, null, 2)
+    );
+
+    const level = opts.rezip ? 9 : 1;
+    setProgress(65, `Zipping at level ${level}…`);
+
+    const zipObj = {};
+    for (const [path, data] of Object.entries(keep)) zipObj[path] = [data, { level }];
+
+    const rezipped = await new Promise((res, rej) => fflate.zip(zipObj, (e, d) => e ? rej(e) : res(d)));
+
+    setProgress(95, 'Finalizing…');
+
+    const finalSize = rezipped.length;
+    const saved = origSize - finalSize;
+    const savedPct = ((saved / origSize) * 100).toFixed(1);
+    const fileExt = opts.format === 'zip' ? '.zip' : '.mrpack';
+    resultFilename = loadedFile.name.replace(/\.mrpack$/, '') + opts.suffix + fileExt;
+    resultBlob = new Blob([rezipped], { type: 'application/zip' });
+
+    setProgress(100, 'Done!');
+    log('ok', `${fmtBytes(origSize)} → ${fmtBytes(finalSize)} · saved ${fmtBytes(Math.max(0,saved))} (${savedPct}%)`);
+
+    document.getElementById('res-orig').textContent = fmtBytes(origSize);
+    document.getElementById('res-final').textContent = fmtBytes(finalSize);
+    document.getElementById('res-saved').textContent = saved > 0 ? `-${fmtBytes(saved)} (${savedPct}%)` : '~0 B';
+    document.getElementById('result-section').style.display = 'block';
+
+  } catch (err) {
+    log('err', `Error: ${err.message}`);
+    setProgress(0, 'Failed');
+    document.getElementById('compress-btn').disabled = false;
+  }
+}
+
+function downloadResult() {
+  if (!resultBlob) return;
+  const url = URL.createObjectURL(resultBlob);
+  const a = document.createElement('a');
+  a.href = url; a.download = resultFilename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function resetTool() {
+  loadedFile = null; resultBlob = null;
+  document.getElementById('file-info').style.display = 'none';
+  document.getElementById('result-section').style.display = 'none';
+  document.getElementById('progress-section').style.display = 'none';
+  document.getElementById('compress-btn').disabled = true;
+  document.getElementById('path-input').value = '';
+  fileInput.value = '';
+}
+
+function setProgress(pct, stage) {
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-stage').textContent = stage;
+}
+
+function log(type, msg) {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = 'log-' + type;
+  line.textContent = ({ ok:'✓ ', warn:'⚠ ', err:'✗ ', info:'  ' }[type] || '') + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(2) + ' MB';
+}
+
+function simpleHash(data) {
+  let h = 0;
+  for (let i = 0; i < data.length; i += 16)
+    h = (Math.imul(h ^ data[i], 0x9e3779b9) + (h << 6) + (h >> 2)) | 0;
+  return h;
+}
+</script>
+</body>
+</html>
